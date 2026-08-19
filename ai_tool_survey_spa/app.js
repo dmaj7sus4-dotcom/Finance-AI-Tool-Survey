@@ -1,15 +1,13 @@
-/* AI Tool Request & Assessment Form — serverless SPA (Entra ID + Graph + SharePoint) */
+/* AI Tool Request & Assessment Form — public form (no sign-in) */
 const RE = window.RecommendationEngine;
 const TOOLS = RE.TOOLS;
 const ACTIVITIES = RE.ACTIVITIES;
 const CONFIDENTIAL_FIELDS = RE.CONFIDENTIAL_FIELDS;
 
 const state = {
-  account: null,
-  tab: 'new', // 'new' | 'requests'
   step: 0,
   user: { name:'', email:'', dept:'', bu:'', country:'', role:'', resp:'',
-          supName:'', supEmail:'', cc:'', supStatus:'checking', manualSupervisor:false },
+          supName:'', supEmail:'', cc:'' },
   confidential: {},
   publicOnly: null,
   activities: [],
@@ -19,92 +17,31 @@ const state = {
   submitting: false,
   submitted: null,
   submitError: null,
-  requestsLoading: false,
-  requests: [],
-  requestsError: null,
-  expandedId: null,
-  decisionNote: {},
-  decisionError: null,
 };
 
 const STEP_TITLES = [
-  'AI Tool ที่บริษัทรองรับ','ยืนยันข้อมูลผู้ใช้งาน','ประเมินความลับของข้อมูล',
+  'AI Tool ที่บริษัทรองรับ','ข้อมูลผู้ใช้งาน','ประเมินความลับของข้อมูล',
   'เลือกกิจกรรมที่ต้องใช้ AI','คำแนะนำเครื่องมือ AI','ขั้นตอนการอนุมัติ','สรุปคำขอ & ส่งคำขอ'
 ];
 
 function levelPill(level){ return `<span class="lvl-pill lvl-${level}">Level ${level}</span>`; }
 function toolName(id){ return TOOLS[id] ? TOOLS[id].name : id; }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 /* ======================= BOOT ======================= */
-async function boot(){
-  const account = await initAuth();
-  state.account = account;
-  if(!account){ renderRoot(); return; }
-  await loadProfile();
-  renderRoot();
-}
-
-async function loadProfile(){
-  state.user.supStatus = 'checking';
-  try{
-    const me = await getMyProfile();
-    state.user.name = me.displayName;
-    state.user.email = me.mail || me.userPrincipalName;
-    state.user.dept = me.department || '';
-    state.user.bu = me.companyName || '';
-  }catch(e){
-    console.error('[profile] failed to load /me:', e.message);
-  }
-  try{
-    const manager = await getMyManager();
-    if(manager){
-      state.user.supName = manager.displayName;
-      state.user.supEmail = manager.mail;
-      state.user.supStatus = 'found-entra';
-    } else {
-      const viaList = await lookupSupervisorFromList(state.user.email);
-      if(viaList){
-        state.user.supName = viaList.supName; state.user.supEmail = viaList.supEmail; state.user.cc = viaList.cc;
-        state.user.supStatus = 'found-list';
-      } else {
-        state.user.supStatus = 'notfound';
-      }
-    }
-  }catch(e){
-    console.error('[profile] manager lookup failed:', e.message);
-    state.user.supStatus = 'notfound';
-  }
-}
-
 function renderRoot(){
   const root = document.getElementById('root');
-  if(!state.account){ root.innerHTML = renderSignIn(); return; }
-  root.innerHTML = renderUserChip() + renderTabs() + (state.tab==='new' ? renderWizard() : renderRequestsTab());
+  let banner = '';
+  if(!API.configured()){
+    banner = `<div class="card setup-warn">
+      <h3>⚙️ ยังตั้งค่าไม่เสร็จ</h3>
+      <p>ระบบยังไม่ได้เชื่อมกับที่เก็บข้อมูล — เปิดไฟล์ <code>config.js</code> แล้วใส่ Web app URL
+      ที่ได้จาก Google Apps Script (ดูขั้นตอนที่ 3 ใน README)</p>
+      <p class="hint">กรอกฟอร์มดูก่อนได้ตามปกติ แต่จะยังกด Submit ไม่สำเร็จ</p>
+    </div>`;
+  }
+  root.innerHTML = banner + renderWizard();
   window.scrollTo({top:0,behavior:'smooth'});
-}
-
-/* ======================= Sign-in ======================= */
-function renderSignIn(){
-  return `
-  <div class="card signin-card">
-    <div class="ms-icon">🔐</div>
-    <h2>เข้าสู่ระบบด้วยบัญชีองค์กร</h2>
-    <p class="sec-desc">ระบบใช้ Microsoft Entra ID ของคุณในการยืนยันตัวตน ดึงข้อมูลหัวหน้างานอัตโนมัติ และควบคุมสิทธิ์การอนุมัติ — ไม่มีรหัสผ่านแยกสำหรับระบบนี้</p>
-    <button class="btn ms" onclick="signIn()">Sign in with Microsoft</button>
-  </div>`;
-}
-
-function renderUserChip(){
-  const u = state.user;
-  return `<div class="user-chip">Signed in as <strong>${u.name || state.account.username}</strong> (${u.email || state.account.username})
-    &nbsp;|&nbsp; <button class="link-btn" onclick="signOut()">Sign out</button></div>`;
-}
-
-function renderTabs(){
-  return `<div class="top-tabs">
-    <button class="${state.tab==='new'?'active':''}" onclick="state.tab='new';renderRoot()">📝 New Request</button>
-    <button class="${state.tab==='requests'?'active':''}" onclick="switchToRequests()">📋 My Requests / Approvals</button>
-  </div>`;
 }
 
 /* ======================= Wizard ======================= */
@@ -142,34 +79,24 @@ function renderStep0(){
   </div>`;
 }
 
-/* ---- Step 1: Confirm user info (mostly auto from Entra ID) ---- */
+/* ---- Step 1: User info (all manual — no sign-in) ---- */
 function renderStep1(){
   const u = state.user;
-  let supBox;
-  if(u.supStatus==='checking'){
-    supBox = `<div class="lookup-box">🔎 กำลังดึงข้อมูลหัวหน้างานจาก Microsoft Entra ID...</div>`;
-  } else if(u.manualSupervisor || u.supStatus==='notfound'){
-    supBox = `<div class="lookup-box notfound">⚠️ ไม่พบข้อมูลหัวหน้างานอัตโนมัติ — กรุณากรอกด้วยตนเอง
-      <div class="field-row" style="margin-top:10px">
-        <div class="field"><label>Supervisor Name <span class="req">*</span></label><input type="text" value="${u.supName}" oninput="state.user.supName=this.value"></div>
-        <div class="field"><label>Supervisor Email <span class="req">*</span></label><input type="email" value="${u.supEmail}" oninput="state.user.supEmail=this.value"></div>
-      </div></div>`;
-  } else {
-    const src = u.supStatus==='found-entra' ? 'Microsoft Entra ID (อัตโนมัติ)' : 'Supervisor Mapping List';
-    supBox = `<div class="lookup-box found">✅ แหล่งข้อมูล: ${src}<br>Supervisor: <strong>${u.supName}</strong> (${u.supEmail})
-      <div><button class="link-btn" onclick="state.user.manualSupervisor=true;renderRoot()">ไม่ถูกต้อง? แก้ไขด้วยตนเอง</button></div></div>`;
-  }
   return `
   <div class="card">
-    <h2 class="sec-title">Section 2 — ยืนยันข้อมูลผู้ใช้งาน</h2>
-    <p class="sec-desc">ชื่อและอีเมลดึงมาจากบัญชี Microsoft ของคุณโดยอัตโนมัติ กรุณาตรวจสอบ/เติมข้อมูลที่เหลือให้ครบ</p>
+    <h2 class="sec-title">Section 2 — ข้อมูลผู้ใช้งาน</h2>
+    <p class="sec-desc">กรอกข้อมูลของคุณและหัวหน้างานที่จะเป็นผู้อนุมัติคำขอนี้</p>
     <div class="field-row">
-      <div class="field"><label>Name</label><input type="text" value="${u.name}" readonly></div>
-      <div class="field"><label>Email Address</label><input type="text" value="${u.email}" readonly></div>
+      <div class="field"><label>ชื่อ-นามสกุล <span class="req">*</span></label>
+        <input type="text" id="f_name" value="${esc(u.name)}" oninput="state.user.name=this.value"></div>
+      <div class="field"><label>อีเมล <span class="req">*</span></label>
+        <input type="email" id="f_email" value="${esc(u.email)}" oninput="state.user.email=this.value" placeholder="name@banpu.co.th"></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>Department</label><input type="text" id="f_dept" value="${u.dept}" oninput="state.user.dept=this.value"></div>
-      <div class="field"><label>Business Unit <span class="req">*</span></label><input type="text" id="f_bu" value="${u.bu}" oninput="state.user.bu=this.value"></div>
+      <div class="field"><label>Department</label>
+        <input type="text" id="f_dept" value="${esc(u.dept)}" oninput="state.user.dept=this.value"></div>
+      <div class="field"><label>Business Unit <span class="req">*</span></label>
+        <input type="text" id="f_bu" value="${esc(u.bu)}" oninput="state.user.bu=this.value"></div>
     </div>
     <div class="field-row">
       <div class="field"><label>Country <span class="req">*</span></label>
@@ -177,11 +104,25 @@ function renderStep1(){
           <option value="">-- เลือก --</option>
           ${['Thailand','Indonesia','Australia','China','Singapore','Other'].map(c=>`<option ${u.country===c?'selected':''}>${c}</option>`).join('')}
         </select></div>
-      <div class="field"><label>Job Role <span class="req">*</span></label><input type="text" id="f_role" value="${u.role}" oninput="state.user.role=this.value"></div>
+      <div class="field"><label>Job Role <span class="req">*</span></label>
+        <input type="text" id="f_role" value="${esc(u.role)}" oninput="state.user.role=this.value"></div>
     </div>
-    <div class="field full"><label>Main Responsibilities</label><textarea rows="2" oninput="state.user.resp=this.value">${u.resp}</textarea></div>
-    <h4 style="margin:18px 0 6px;color:var(--navy)">Supervisor / Approver</h4>
-    ${supBox}
+    <div class="field full"><label>Main Responsibilities</label>
+      <textarea rows="2" oninput="state.user.resp=this.value">${esc(u.resp)}</textarea></div>
+
+    <h4 style="margin:18px 0 6px;color:var(--navy)">หัวหน้างาน / ผู้อนุมัติ</h4>
+    <div class="field-row">
+      <div class="field"><label>ชื่อหัวหน้างาน <span class="req">*</span></label>
+        <input type="text" id="f_supname" value="${esc(u.supName)}" oninput="state.user.supName=this.value"></div>
+      <div class="field"><label>อีเมลหัวหน้างาน <span class="req">*</span></label>
+        <input type="email" id="f_supemail" value="${esc(u.supEmail)}" oninput="state.user.supEmail=this.value"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Cost Center</label>
+        <input type="text" id="f_cc" value="${esc(u.cc)}" oninput="state.user.cc=this.value"></div>
+      <div class="field"></div>
+    </div>
+
     <div id="step1err" class="err"></div>
     <div class="btn-row">
       <button class="btn secondary" onclick="state.step=0;renderRoot()">← กลับ</button>
@@ -190,14 +131,22 @@ function renderStep1(){
   </div>`;
 }
 
+function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim()); }
+
 function validateStep1(){
   const u = state.user;
   const missing = [];
+  if(!u.name) missing.push('ชื่อ-นามสกุล');
+  if(!u.email) missing.push('อีเมล');
   if(!u.bu) missing.push('Business Unit');
   if(!u.country) missing.push('Country');
   if(!u.role) missing.push('Job Role');
-  if(!u.supName || !u.supEmail) missing.push('Supervisor Name/Email');
-  if(missing.length){ document.getElementById('step1err').textContent = 'กรุณากรอกให้ครบ: ' + missing.join(', '); return; }
+  if(!u.supName) missing.push('ชื่อหัวหน้างาน');
+  if(!u.supEmail) missing.push('อีเมลหัวหน้างาน');
+  const err = document.getElementById('step1err');
+  if(missing.length){ err.textContent = 'กรุณากรอกให้ครบ: ' + missing.join(', '); return; }
+  if(!isEmail(u.email)){ err.textContent = 'รูปแบบอีเมลของคุณไม่ถูกต้อง'; return; }
+  if(!isEmail(u.supEmail)){ err.textContent = 'รูปแบบอีเมลหัวหน้างานไม่ถูกต้อง'; return; }
   state.step = 2; renderRoot();
 }
 
@@ -268,8 +217,8 @@ function validateStep3(){
 /* ---- Step 4: Recommendation ---- */
 function renderStep4(){
   const classification = RE.computeClassification(state.confidential);
-  const level = RE.computeLevel(state.activities);
   const { tools, restricted, rawTools } = RE.computeRequiredTools(state.activities, classification);
+  const level = RE.computeLevel(state.activities);
   const isConf = classification==='confidential';
   const banner = `<div class="result-banner ${isConf?'conf':'nonconf'}"><div class="icon">${isConf?'🔒':'🌐'}</div>
     <div><strong>Data Classification: ${isConf?'Confidential':'Non-Confidential'}</strong><br>
@@ -283,7 +232,7 @@ function renderStep4(){
       <div><div class="name">${TOOLS[t].name} ${wasRestricted?'<span class="tag tag-dep">ปรับเนื่องจากข้อมูลลับ</span>':''}</div>
       <div class="why">รองรับกิจกรรม: ${reasons.join(', ')}</div></div><div>${levelPill(TOOLS[t].level)}</div></div>`;
   }).join('');
-  const restrictedNote = restricted ? `<div class="warn-box">⚠️ บางกิจกรรมโดยปกติแนะนำ Claude แต่มีข้อมูลลับ ระบบจึงแนะนำ Copilot Cowork แทน — หากจำเป็นต้องใช้ Claude จริง ปรึกษาทีม IT/Security</div>` : '';
+  const restrictedNote = restricted ? `<div class="warn-box">⚠️ บางกิจกรรมโดยปกติแนะนำ Claude แต่มีข้อมูลลับ ระบบจึงแนะนำ Copilot Cowork แทน — หากจำเป็นต้องใช้ Claude จริง ให้ระบุเหตุผลด้านล่างเพื่อขออนุมัติพิเศษ</div>` : '';
   const overrideOptions = Object.entries(TOOLS).map(([id,t])=>`<option value="${id}" ${state.overrideTool===id?'selected':''}>${t.name}</option>`).join('');
   return `
   <div class="card">
@@ -300,7 +249,7 @@ function renderStep4(){
           <option value="">-- ใช้คำแนะนำระบบ --</option>${overrideOptions}
         </select></div>
       <div class="field"><label>Reason for Override</label>
-        <input type="text" value="${state.overrideReason}" oninput="state.overrideReason=this.value"></div>
+        <input type="text" value="${esc(state.overrideReason)}" oninput="state.overrideReason=this.value"></div>
     </div>
     ${state.overrideTool && isConf && TOOLS[state.overrideTool].platform==='claude' ? `<div class="warn-box">⚠️ ขัดกับ Governance Rule — จะถูกบังคับส่งขออนุมัติพิเศษ</div>` : ''}
     <div class="btn-row">
@@ -318,8 +267,8 @@ function renderStep5(){
   const approval = RE.computeApproval(level, tools, state.overrideTool, classification);
   let body;
   if(approval.required===true){
-    body = `<div class="note-box">🔺 ต้องผ่านการอนุมัติจากหัวหน้างาน/ทีมกำกับดูแล (${state.user.supName})<br><span class="hint">${approval.reason}</span></div>
-      <div class="note-box">คำขอนี้จะปรากฏในแท็บ "My Requests / Approvals" ของผู้ที่มีสิทธิ์อนุมัติใน SharePoint List — สิทธิ์นี้ถูกกำหนดโดยแอดมิน SharePoint ไม่ใช่แอปนี้</div>`;
+    body = `<div class="note-box">🔺 ต้องผ่านการอนุมัติจากหัวหน้างาน/ทีมกำกับดูแล (${esc(state.user.supName)})<br><span class="hint">${approval.reason}</span></div>
+      <div class="note-box">เมื่อส่งคำขอแล้ว สถานะจะเป็น <strong>PENDING</strong> จนกว่าทีมกำกับดูแลจะเข้าไปกดอนุมัติในหน้า Admin</div>`;
   } else if(approval.required==='optional'){
     body = `<div class="note-box">🔸 AI Level 2 — Optional (Policy Driven)<br><span class="hint">${approval.reason}</span></div>
       <label style="font-size:13px;display:flex;gap:8px;align-items:center;margin-top:8px">
@@ -348,10 +297,10 @@ function renderStep6(){
     return `
     <div class="card">
       <h2 class="sec-title">ส่งคำขอสำเร็จ</h2>
-      <div class="note-box">✅ บันทึกลง SharePoint แล้ว — Request ID: <strong>${s.id}</strong><br>
+      <div class="note-box">✅ บันทึกเรียบร้อยแล้ว — Request ID: <strong>${esc(s.id)}</strong><br>
         สถานะ: <span class="pill-status ${statusClass}">${statusLabel}</span></div>
-      <div class="btn-row"><button class="btn secondary" onclick="resetWizard()">+ สร้างคำขอใหม่</button>
-        <button class="btn" onclick="switchToRequests()">ดูใน My Requests →</button></div>
+      <p class="hint">บันทึก Request ID นี้ไว้อ้างอิง — ใช้สอบถามสถานะกับทีมกำกับดูแลได้</p>
+      <div class="btn-row"><div></div><button class="btn secondary" onclick="resetWizard()">+ สร้างคำขอใหม่</button></div>
     </div>`;
   }
   const classification = RE.computeClassification(state.confidential);
@@ -362,21 +311,21 @@ function renderStep6(){
   const activityLabels = state.activities.map(id=>RE.activityById(id).label).join(', ');
   const approvalRequired = approval.required===true || (approval.required==='optional' && state.policyOverrideAck);
   const rows = [
-    ['Requester Information', `${state.user.name} — ${state.user.dept} / ${state.user.bu}`],
-    ['Supervisor', `${state.user.supName} (${state.user.supEmail})`],
+    ['ผู้ขอ', `${esc(state.user.name)} (${esc(state.user.email)}) — ${esc(state.user.dept)} / ${esc(state.user.bu)}`],
+    ['หัวหน้างาน', `${esc(state.user.supName)} (${esc(state.user.supEmail)})`],
     ['Data Classification', classification==='confidential'?'Confidential':'Non-Confidential'],
     ['Activities Selected', activityLabels],
     ['AI Capability Level', `Level ${level}`],
     ['Recommended Tool (System)', tools.map(toolName).join(' + ')],
-    ['Selected Tool (Final)', finalTool + (state.overrideReason?` — เหตุผล: ${state.overrideReason}`:'')],
+    ['Selected Tool (Final)', finalTool + (state.overrideReason?` — เหตุผล: ${esc(state.overrideReason)}`:'')],
     ['Approval Requirement', approvalRequired ? 'Yes' : 'No'],
   ];
   return `
   <div class="card">
     <h2 class="sec-title">Section 6 — Final Summary</h2>
-    <p class="sec-desc">ตรวจสอบข้อมูลก่อนส่งคำขอ — จะถูกเขียนลง SharePoint List โดยตรงด้วยบัญชีของคุณ</p>
+    <p class="sec-desc">ตรวจสอบข้อมูลก่อนส่งคำขอ</p>
     <table class="summary-table">${rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>
-    ${state.submitError ? `<div class="err">${state.submitError}</div>` : ''}
+    ${state.submitError ? `<div class="err">${esc(state.submitError)}</div>` : ''}
     <div class="btn-row">
       <button class="btn secondary" onclick="state.step=5;renderRoot()">← กลับ</button>
       <button class="btn" ${state.submitting?'disabled':''} onclick="submitRequest()">${state.submitting?'กำลังส่ง...':'📩 Submit Request'}</button>
@@ -386,36 +335,27 @@ function renderStep6(){
 
 async function submitRequest(){
   state.submitting = true; state.submitError = null; renderRoot();
-  const classification = RE.computeClassification(state.confidential);
-  const level = RE.computeLevel(state.activities);
-  const { tools, restricted } = RE.computeRequiredTools(state.activities, classification);
-  const approval = RE.computeApproval(level, tools, state.overrideTool, classification);
-  const approvalRequired = approval.required===true || (approval.required==='optional' && state.policyOverrideAck);
-
-  const record = {
-    id: 'REQ-' + Math.random().toString(16).slice(2,10).toUpperCase(),
-    submittedAt: new Date().toISOString(),
-    name: state.user.name, email: state.user.email, dept: state.user.dept, bu: state.user.bu,
-    country: state.user.country, role: state.user.role, resp: state.user.resp,
-    supName: state.user.supName, supEmail: state.user.supEmail, cc: state.user.cc,
-    confidential: state.confidential, publicOnly: state.publicOnly,
-    activities: state.activities,
-    classification, level, recommendedTools: tools, restricted,
-    overrideTool: state.overrideTool, overrideReason: state.overrideReason,
-    approvalRequired,
-    status: approvalRequired ? 'pending' : 'auto-approved',
-    decidedBy: null, decidedAt: null, decisionNote: null,
-  };
   try{
-    await createRequestItem(record);
-    state.submitted = record; state.submitting = false; renderRoot();
+    // Only raw answers go over the wire. The server recomputes classification,
+    // level, recommended tools and approval requirement from these before
+    // saving, so nothing here can be forged by editing the page.
+    const result = await API.call({
+      action: 'submit',
+      user: state.user,
+      confidential: state.confidential,
+      publicOnly: state.publicOnly,
+      activities: state.activities,
+      overrideTool: state.overrideTool || '',
+      overrideReason: state.overrideReason,
+      policyOverrideAck: !!state.policyOverrideAck,
+    });
+    state.submitted = result;
   }catch(e){
     console.error(e);
-    state.submitError = e.status===403
-      ? 'บัญชีของคุณไม่มีสิทธิ์เขียนข้อมูลลง SharePoint List นี้ — กรุณาติดต่อผู้ดูแลระบบ'
-      : ('ส่งคำขอไม่สำเร็จ: ' + e.message);
-    state.submitting = false; renderRoot();
+    state.submitError = 'ส่งคำขอไม่สำเร็จ: ' + e.message;
   }
+  state.submitting = false;
+  renderRoot();
 }
 
 function resetWizard(){
@@ -426,90 +366,4 @@ function resetWizard(){
   renderRoot();
 }
 
-/* ======================= My Requests / Approvals ======================= */
-async function switchToRequests(){
-  state.tab = 'requests';
-  renderRoot();
-  state.requestsLoading = true; state.requestsError = null;
-  renderRoot();
-  try{
-    state.requests = await listVisibleRequests();
-  }catch(e){
-    state.requestsError = 'โหลดรายการไม่สำเร็จ: ' + e.message;
-  }
-  state.requestsLoading = false;
-  renderRoot();
-}
-
-function renderRequestsTab(){
-  if(state.requestsLoading) return `<div class="card">กำลังโหลด...</div>`;
-  if(state.requestsError) return `<div class="card"><div class="err">${state.requestsError}</div></div>`;
-
-  const list = state.requests;
-  const pending = list.filter(r=>r.status==='pending').length;
-  const stats = `<div class="stat-row">
-    <div class="stat"><div class="n">${list.length}</div><div class="l">Visible to you</div></div>
-    <div class="stat"><div class="n">${pending}</div><div class="l">Pending</div></div>
-  </div>
-  <div class="perm-note">คุณเห็นเฉพาะคำขอที่บัญชีของคุณมีสิทธิ์เข้าถึงใน SharePoint — ถ้าคุณเป็นผู้อนุมัติ จะเห็นคำขอของทุกคน มิฉะนั้นจะเห็นเฉพาะคำขอของตัวเอง</div>`;
-
-  const rows = list.map(r=>{
-    const statusClass = r.status==='approved'?'pill-approved':r.status==='rejected'?'pill-rejected':r.status==='auto-approved'?'pill-auto':'pill-pending';
-    const finalTool = r.overrideTool ? toolName(r.overrideTool) : (r.recommendedTools||[]).map(toolName).join(' + ');
-    const isExpanded = state.expandedId === r.id;
-    let detail = '';
-    if(isExpanded){
-      const decisionUi = r.status==='pending' ? `
-        <div style="margin-top:10px">
-          <input type="text" placeholder="หมายเหตุ (ถ้ามี)" style="width:60%" oninput="state.decisionNote['${r.id}']=this.value">
-          <button class="btn" onclick="decide('${r._itemId}','${r.id}','approved')">✅ Approve</button>
-          <button class="btn danger" onclick="decide('${r._itemId}','${r.id}','rejected')">❌ Reject</button>
-        </div>` : `<div class="hint">ตัดสินใจโดย ${r.decidedBy||'-'} เมื่อ ${r.decidedAt?new Date(r.decidedAt).toLocaleString():'-'} ${r.decisionNote?('— '+r.decisionNote):''}</div>`;
-      detail = `<tr class="row-detail"><td colspan="8">
-        <strong>Supervisor:</strong> ${r.supName} (${r.supEmail})<br>
-        <strong>Activities:</strong> ${(r.activities||[]).map(id=>{const a=RE.activityById(id); return a?a.label:id;}).join(', ')}<br>
-        <strong>Recommended (system):</strong> ${(r.recommendedTools||[]).map(toolName).join(' + ')} ${r.restricted?'<span class="tag tag-dep">restricted</span>':''}<br>
-        ${r.overrideTool ? `<strong>Override:</strong> ${toolName(r.overrideTool)} — ${r.overrideReason||''}<br>` : ''}
-        ${decisionUi}
-      </td></tr>`;
-    }
-    return `<tr>
-      <td><button class="link-btn" onclick="state.expandedId = state.expandedId==='${r.id}'?null:'${r.id}'; renderRoot()">${r.id}</button></td>
-      <td>${new Date(r.submittedAt).toLocaleString()}</td>
-      <td>${r.name}<br><span class="hint">${r.dept} / ${r.bu}</span></td>
-      <td>${r.classification==='confidential'?'Confidential':'Non-Confidential'}</td>
-      <td>${levelPill(r.level)}</td>
-      <td>${finalTool}</td>
-      <td>${r.approvalRequired?'Yes':'No'}</td>
-      <td><span class="pill-status ${statusClass}">${r.status.toUpperCase()}</span></td>
-    </tr>${detail}`;
-  }).join('') || `<tr><td colspan="8" style="text-align:center;color:var(--muted)">ไม่มีคำขอ</td></tr>`;
-
-  return `
-  <div class="card">
-    ${stats}
-    ${state.decisionError ? `<div class="err">${state.decisionError}</div>` : ''}
-    <div class="btn-row" style="margin-top:0;margin-bottom:14px"><div></div>
-      <button class="btn secondary" onclick="exportRequestsToCsv(state.requests)" ${list.length===0?'disabled':''}>⬇ Export CSV</button></div>
-    <table class="audit-table">
-      <tr><th>Request ID</th><th>Submitted</th><th>Requester</th><th>Classification</th><th>Level</th><th>Final Tool</th><th>Approval Req.</th><th>Status</th></tr>
-      ${rows}
-    </table>
-  </div>`;
-}
-
-async function decide(itemId, displayId, decision){
-  state.decisionError = null;
-  const note = state.decisionNote[displayId] || '';
-  try{
-    await decideRequest(itemId, decision, note, state.user.name);
-    await switchToRequests();
-  }catch(e){
-    state.decisionError = e.status===403
-      ? 'บัญชีของคุณไม่มีสิทธิ์อนุมัติ/ปฏิเสธคำขอ — กรุณาติดต่อทีมกำกับดูแล (ผู้ดูแล SharePoint ต้องเพิ่มคุณในกลุ่ม Approvers)'
-      : ('ดำเนินการไม่สำเร็จ: ' + e.message);
-    renderRoot();
-  }
-}
-
-boot();
+renderRoot();
