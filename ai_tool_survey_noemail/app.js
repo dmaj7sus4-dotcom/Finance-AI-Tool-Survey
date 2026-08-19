@@ -17,7 +17,23 @@ const state = {
   submitting: false,
   submitted: null,
   submitError: null,
+  // Sent with the submit so a retry cannot create a second row. Generated once
+  // per filled-in form; a new one is issued only after a request is actually
+  // filed (see resetWizard), so pressing Submit again after an error still
+  // resolves to the same row rather than a duplicate.
+  clientKey: newClientKey(),
 };
+
+function newClientKey(){
+  if (window.crypto && typeof window.crypto.randomUUID === 'function'){
+    return window.crypto.randomUUID();
+  }
+  // Older browsers: still unique enough, since it only has to be unique among
+  // this one person's submissions.
+  return 'k-' + Date.now().toString(36) + '-' +
+         Math.random().toString(36).slice(2, 10) +
+         Math.random().toString(36).slice(2, 10);
+}
 
 const STEP_TITLES = [
   'AI Tool ที่บริษัทรองรับ','ข้อมูลผู้ใช้งาน','ประเมินความลับของข้อมูล',
@@ -74,7 +90,7 @@ function renderStep0(){
   <div class="card">
     <h2 class="sec-title">Section 1 — AI Tool ที่บริษัทรองรับ</h2>
     <p class="sec-desc">โปรดศึกษาความสามารถของแต่ละเครื่องมือก่อนเริ่มทำแบบสำรวจ</p>
-    <table><tr><th>AI Tool</th><th>Suitable For</th><th>Work Data Access</th><th>Approval</th></tr>${rows}</table>
+    <div class="tablewrap"><table><tr><th>AI Tool</th><th>Suitable For</th><th>Work Data Access</th><th>Approval</th></tr>${rows}</table></div>
     <div class="btn-row"><div></div><button class="btn" onclick="state.step=1;renderRoot()">เริ่มทำแบบสำรวจ →</button></div>
   </div>`;
 }
@@ -448,6 +464,7 @@ async function submitRequest(){
       overrideTool: state.overrideTool || '',
       overrideReason: state.overrideReason,
       policyOverrideAck: !!state.policyOverrideAck,
+      clientKey: state.clientKey,
     });
     state.submitted = result;
   }catch(e){
@@ -463,6 +480,8 @@ function resetWizard(){
   state.confidential = {}; state.publicOnly=null; state.activities=[];
   state.overrideTool=null; state.overrideReason=''; state.policyOverrideAck=false;
   state.submitting=false; state.submitted=null; state.submitError=null;
+  // A genuinely new request, so it gets its own key.
+  state.clientKey = newClientKey();
   renderRoot();
 }
 
