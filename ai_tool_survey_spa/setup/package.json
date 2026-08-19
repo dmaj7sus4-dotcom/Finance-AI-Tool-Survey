@@ -1,0 +1,14 @@
+{
+  "name": "ai-tool-request-form-setup",
+  "version": "1.0.0",
+  "private": true,
+  "description": "One-time local CLI tools to provision the SharePoint list this app reads/writes. Run once by IT, not deployed anywhere.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "resolve-site": "node resolve-site-id.js",
+    "setup-list": "node setup-sharepoint-list.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

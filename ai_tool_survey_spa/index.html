@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Tool Request &amp; Assessment Form</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <span class="badge-live">LIVE — Serverless (Entra ID + SharePoint)</span>
+    <h1>AI Tool Request &amp; Assessment Form</h1>
+    <p>แบบฟอร์มสำรวจและขออนุมัติการใช้เครื่องมือ AI ภายในองค์กร — ข้อมูลทั้งหมดเก็บใน SharePoint ของบริษัทคุณโดยตรง ไม่มี server กลาง</p>
+  </header>
+  <div id="root"></div>
+  <footer class="disclaimer">ระบบนี้ไม่มี server — เบราว์เซอร์ของคุณคุยกับ Microsoft Graph / SharePoint โดยตรงด้วยบัญชี Entra ID ของคุณเอง</footer>
+</div>
+
+<!-- MSAL Browser (delegated auth, PKCE, no client secret) — vendored locally in vendor/,
+     see vendor/README.txt for the exact package version and why it's not loaded from a CDN. -->
+<script src="vendor/msal-browser.min.js"></script>
+<script src="config.js"></script>
+<script src="recommendation.js"></script>
+<script src="auth.js"></script>
+<script src="graph.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

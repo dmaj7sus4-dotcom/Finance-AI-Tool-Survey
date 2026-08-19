@@ -1,0 +1,136 @@
+/**
+ * Shared AI Tool recommendation engine.
+ * Isomorphic: usable both in the browser (attaches to window.RecommendationEngine)
+ * and in Node.js (module.exports) so the client-side preview and the server-side
+ * canonical calculation can NEVER drift out of sync.
+ *
+ * IMPORTANT: the server is always the source of truth. The client only uses this
+ * module to show a live preview before submission; server.js re-runs the same
+ * functions against the submitted answers before persisting a request record.
+ */
+(function (root, factory) {
+  var mod = factory();
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = mod;
+  }
+  if (typeof window !== 'undefined') {
+    window.RecommendationEngine = mod;
+  }
+})(this, function () {
+
+  var TOOLS = {
+    copilot_chat:   { name: 'Microsoft 365 Copilot Chat', suitable: 'General Q&A, writing, brainstorming', workData: 'No', approval: 'No', platform: 'copilot', level: 1 },
+    m365_copilot:   { name: 'Microsoft 365 Copilot', suitable: 'Email, Teams, Excel, Word, PowerPoint, Meetings', workData: 'Yes', approval: 'Depending on policy', platform: 'copilot', level: 2 },
+    copilot_cowork: { name: 'Copilot Cowork', suitable: 'Multi-step execution, workflow automation, advanced tasks', workData: 'Yes', approval: 'Required', platform: 'copilot', level: 3 },
+    claude_team:    { name: 'Claude Team', suitable: 'General analysis, content creation', workData: 'No confidential data', approval: 'Depending on policy', platform: 'claude', level: 1 },
+    claude_code:    { name: 'Claude Code', suitable: 'Development and coding support', workData: 'No confidential data', approval: 'Required', platform: 'claude', level: 3 },
+    claude_cowork:  { name: 'Claude Cowork', suitable: 'Advanced reasoning, coding, agent tasks', workData: 'No confidential data', approval: 'Required', platform: 'claude', level: 3 },
+  };
+
+  var MANDATORY_APPROVAL_TOOLS = ['copilot_cowork', 'claude_cowork', 'claude_code'];
+
+  var CONFIDENTIAL_FIELDS = [
+    'Financial Data', 'Budget & Forecast', 'Vendor Pricing', 'Contracts', 'Employee Data',
+    'Customer Data', 'Executive Reports', 'Strategic Information', 'Internal Reports', 'Source Code'
+  ];
+
+  var ACTIVITIES = [
+    { id: 'draft_email',        label: 'Draft Email',            level: 1, tool: 'copilot_chat' },
+    { id: 'translation',        label: 'Translation',            level: 1, tool: 'copilot_chat' },
+    { id: 'meeting_summary',    label: 'Meeting Summary',        level: 1, tool: 'm365_copilot' },
+    { id: 'doc_summary',        label: 'Document Summary',       level: 1, tool: 'copilot_chat' },
+    { id: 'search_files',       label: 'Search Company Files',   level: 2, tool: 'm365_copilot' },
+    { id: 'analyze_excel',      label: 'Analyze Excel',          level: 2, tool: 'm365_copilot' },
+    { id: 'analyze_financial',  label: 'Analyze Financial Data', level: 2, tool: 'm365_copilot' },
+    { id: 'create_ppt',         label: 'Create PowerPoint',      level: 2, tool: 'm365_copilot' },
+    { id: 'contract_review',    label: 'Contract Review',        level: 2, tool: 'm365_copilot' },
+    { id: 'create_reports',     label: 'Create Reports',         level: 2, tool: 'm365_copilot' },
+    { id: 'workflow_automation',label: 'Workflow Automation',    level: 3, tool: 'copilot_cowork' },
+    { id: 'agent_creation',     label: 'Agent Creation',         level: 3, tool: 'copilot_cowork' },
+    { id: 'coding',             label: 'Coding / Script Creation', level: 3, tool: 'claude_code' },
+    { id: 'multistep',          label: 'Multi-step Execution',   level: 3, tool: 'copilot_cowork' },
+    { id: 'process_automation', label: 'Process Automation',     level: 3, tool: 'copilot_cowork' },
+  ];
+
+  function activityById(id) {
+    for (var i = 0; i < ACTIVITIES.length; i++) if (ACTIVITIES[i].id === id) return ACTIVITIES[i];
+    return null;
+  }
+
+  function computeClassification(confidential) {
+    confidential = confidential || {};
+    for (var i = 0; i < CONFIDENTIAL_FIELDS.length; i++) {
+      if (confidential[CONFIDENTIAL_FIELDS[i]] === 'yes') return 'confidential';
+    }
+    return 'non-confidential';
+  }
+
+  function computeLevel(activityIds) {
+    activityIds = activityIds || [];
+    var max = 0;
+    activityIds.forEach(function (id) {
+      var a = activityById(id);
+      if (a && a.level > max) max = a.level;
+    });
+    return max;
+  }
+
+  function unique(arr) {
+    var seen = {}, out = [];
+    arr.forEach(function (v) { if (!seen[v]) { seen[v] = true; out.push(v); } });
+    return out;
+  }
+
+  function computeRequiredTools(activityIds, classification) {
+    activityIds = activityIds || [];
+    var rawTools = unique(activityIds.map(function (id) {
+      var a = activityById(id);
+      return a ? a.tool : null;
+    }).filter(Boolean));
+
+    var restricted = false;
+    var finalTools = rawTools.map(function (t) {
+      if (classification === 'confidential' && TOOLS[t] && TOOLS[t].platform === 'claude') {
+        restricted = true;
+        return 'copilot_cowork';
+      }
+      return t;
+    });
+    return { tools: unique(finalTools), restricted: restricted, rawTools: rawTools };
+  }
+
+  function computeApproval(level, tools, overrideTool, classification) {
+    tools = tools || [];
+    var usesMandatoryTool = tools.some(function (t) { return MANDATORY_APPROVAL_TOOLS.indexOf(t) > -1; }) ||
+      (overrideTool && MANDATORY_APPROVAL_TOOLS.indexOf(overrideTool) > -1);
+    var policyException = !!(overrideTool && classification === 'confidential' && TOOLS[overrideTool] && TOOLS[overrideTool].platform === 'claude');
+
+    var required, reason;
+    if (policyException) {
+      required = true;
+      reason = 'Policy Exception: overridden to a Claude tool while data is confidential — requires special approval.';
+    } else if (level === 3 || usesMandatoryTool) {
+      required = true;
+      reason = 'AI Level 3 and/or a mandatory-approval tool is involved (Copilot Cowork / Claude Cowork / Claude Code).';
+    } else if (level === 2) {
+      required = 'optional';
+      reason = 'AI Level 2 — approval is optional / policy-driven per Business Unit.';
+    } else {
+      required = false;
+      reason = 'AI Level 1 — no approval required.';
+    }
+    return { required: required, reason: reason, level: level };
+  }
+
+  return {
+    TOOLS: TOOLS,
+    ACTIVITIES: ACTIVITIES,
+    CONFIDENTIAL_FIELDS: CONFIDENTIAL_FIELDS,
+    MANDATORY_APPROVAL_TOOLS: MANDATORY_APPROVAL_TOOLS,
+    activityById: activityById,
+    computeClassification: computeClassification,
+    computeLevel: computeLevel,
+    computeRequiredTools: computeRequiredTools,
+    computeApproval: computeApproval,
+  };
+});
