@@ -196,3 +196,18 @@ header.top a{text-decoration:underline;}
   .activity-grid{grid-template-columns:1fr;}
   .searchbox{width:100%;}
 }
+
+/* ===== searchable dropdown (combobox) ===== */
+.combo{position:relative;}
+.combo-list{
+  display:none;position:absolute;z-index:40;top:calc(100% + 3px);left:0;right:0;
+  max-height:260px;overflow-y:auto;background:#fff;border:1px solid var(--border);
+  border-radius:8px;box-shadow:0 8px 24px rgba(15,41,66,.13);
+}
+.combo-list.open{display:block;}
+.combo-item{padding:8px 12px;cursor:pointer;border-bottom:1px solid #f2f5f8;line-height:1.35;}
+.combo-item:last-child{border-bottom:none;}
+.combo-item:hover{background:var(--teal-light);}
+.combo-item .ci-name{display:block;font-size:13.5px;font-weight:600;color:var(--navy);}
+.combo-item .ci-sub{display:block;font-size:11.5px;color:var(--muted);}
+.combo-empty{padding:10px 12px;font-size:12.5px;color:var(--muted);}

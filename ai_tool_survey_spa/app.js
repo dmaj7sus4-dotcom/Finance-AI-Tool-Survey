@@ -79,22 +79,121 @@ function renderStep0(){
   </div>`;
 }
 
+/* ---- Searchable dropdowns backed by directory.js ----
+ * These suggest, they never restrict: anyone not in the directory can still
+ * type their details in by hand. Picking someone fills the related fields
+ * (name + email + department together) so the three can't disagree.
+ * The list updates in place rather than through renderRoot() — a full
+ * re-render would steal focus from the box you're typing in.
+ */
+const DIR = () => (window.DIRECTORY || []);
+const DEPTS = () => Array.from(new Set(DIR().map(p => p.d).filter(Boolean))).sort();
+
+function comboMatches(kind, q){
+  q = q.trim().toLowerCase();
+  if(kind === 'dept'){
+    const all = DEPTS();
+    return (q ? all.filter(d => d.toLowerCase().includes(q)) : all).slice(0, 60).map(d => ({ d }));
+  }
+  const all = DIR();
+  if(!q) return all.slice(0, 60);
+  return all.filter(p =>
+    p.n.toLowerCase().includes(q) || p.e.toLowerCase().includes(q) || p.d.toLowerCase().includes(q)
+  ).slice(0, 60);
+}
+
+function comboInput(kind, el){
+  // keep whatever was typed, even if it matches nobody
+  if(kind === 'name')     state.user.name = el.value;
+  if(kind === 'email')    state.user.email = el.value;
+  if(kind === 'dept')     state.user.dept = el.value;
+  if(kind === 'supname')  state.user.supName = el.value;
+  if(kind === 'supemail') state.user.supEmail = el.value;
+  comboOpen(kind, el.value);
+}
+
+function comboOpen(kind, q){
+  const box = document.getElementById('combo_' + kind);
+  if(!box) return;
+  const items = comboMatches(kind, q || '');
+  if(!items.length){
+    box.innerHTML = `<div class="combo-empty">ไม่พบในรายชื่อ — พิมพ์เองได้เลย</div>`;
+  } else if(kind === 'dept'){
+    box.innerHTML = items.map(i =>
+      `<div class="combo-item" onmousedown="comboPickDept(${JSON.stringify(i.d).replace(/"/g,'&quot;')})">${esc(i.d)}</div>`).join('');
+  } else {
+    box.innerHTML = items.map(p =>
+      `<div class="combo-item" onmousedown="comboPick('${kind}','${esc(p.e)}')">
+         <span class="ci-name">${esc(p.n)}</span>
+         <span class="ci-sub">${esc(p.d)} · ${esc(p.e)}</span>
+       </div>`).join('');
+  }
+  box.classList.add('open');
+}
+
+function comboClose(kind){
+  // small delay so a click on an item still registers
+  setTimeout(() => {
+    const box = document.getElementById('combo_' + kind);
+    if(box) box.classList.remove('open');
+  }, 120);
+}
+
+function setVal(id, v){ const el = document.getElementById(id); if(el) el.value = v; }
+
+function comboPick(kind, email){
+  const p = DIR().find(x => x.e === email);
+  if(!p) return;
+  if(kind === 'name' || kind === 'email'){
+    state.user.name = p.n; state.user.email = p.e;
+    if(p.d) state.user.dept = p.d;
+    setVal('f_name', p.n); setVal('f_email', p.e); setVal('f_dept', state.user.dept);
+  } else {
+    state.user.supName = p.n; state.user.supEmail = p.e;
+    setVal('f_supname', p.n); setVal('f_supemail', p.e);
+  }
+  ['name','email','dept','supname','supemail'].forEach(k => {
+    const b = document.getElementById('combo_' + k); if(b) b.classList.remove('open');
+  });
+  const err = document.getElementById('step1err'); if(err) err.textContent = '';
+}
+
+function comboPickDept(d){
+  state.user.dept = d;
+  setVal('f_dept', d);
+  const b = document.getElementById('combo_dept'); if(b) b.classList.remove('open');
+}
+
+function combo(kind, id, value, placeholder){
+  return `<div class="combo">
+    <input type="text" id="${id}" class="combo-input" autocomplete="off" placeholder="${esc(placeholder)}"
+           value="${esc(value)}" oninput="comboInput('${kind}', this)"
+           onfocus="comboOpen('${kind}', this.value)" onblur="comboClose('${kind}')">
+    <div class="combo-list" id="combo_${kind}"></div>
+  </div>`;
+}
+
 /* ---- Step 1: User info (all manual — no sign-in) ---- */
 function renderStep1(){
   const u = state.user;
+  const dirNote = DIR().length
+    ? `<div class="note-box">🔎 ช่องชื่อ อีเมล แผนก และหัวหน้างาน ค้นหาได้ — พิมพ์บางส่วนของชื่อ อีเมล หรือแผนก
+        แล้วเลือกจากรายการ ระบบจะเติมช่องที่เหลือให้อัตโนมัติ (ถ้าไม่มีชื่อคุณในรายการ พิมพ์เองได้ตามปกติ)</div>`
+    : '';
   return `
   <div class="card">
     <h2 class="sec-title">Section 2 — ข้อมูลผู้ใช้งาน</h2>
     <p class="sec-desc">กรอกข้อมูลของคุณและหัวหน้างานที่จะเป็นผู้อนุมัติคำขอนี้</p>
+    ${dirNote}
     <div class="field-row">
       <div class="field"><label>ชื่อ-นามสกุล <span class="req">*</span></label>
-        <input type="text" id="f_name" value="${esc(u.name)}" oninput="state.user.name=this.value"></div>
+        ${combo('name', 'f_name', u.name, 'พิมพ์เพื่อค้นหาชื่อ...')}</div>
       <div class="field"><label>อีเมล <span class="req">*</span></label>
-        <input type="email" id="f_email" value="${esc(u.email)}" oninput="state.user.email=this.value" placeholder="name@banpu.co.th"></div>
+        ${combo('email', 'f_email', u.email, 'name@banpu.co.th')}</div>
     </div>
     <div class="field-row">
       <div class="field"><label>Department</label>
-        <input type="text" id="f_dept" value="${esc(u.dept)}" oninput="state.user.dept=this.value"></div>
+        ${combo('dept', 'f_dept', u.dept, 'พิมพ์เพื่อค้นหาแผนก...')}</div>
       <div class="field"><label>Business Unit <span class="req">*</span></label>
         <input type="text" id="f_bu" value="${esc(u.bu)}" oninput="state.user.bu=this.value"></div>
     </div>
@@ -111,11 +210,12 @@ function renderStep1(){
       <textarea rows="2" oninput="state.user.resp=this.value">${esc(u.resp)}</textarea></div>
 
     <h4 style="margin:18px 0 6px;color:var(--navy)">หัวหน้างาน / ผู้อนุมัติ</h4>
+    <p class="hint" style="margin:0 0 8px">อีเมลขออนุมัติจะถูกส่งไปที่อีเมลนี้ กรุณาตรวจสอบให้ถูกต้อง</p>
     <div class="field-row">
       <div class="field"><label>ชื่อหัวหน้างาน <span class="req">*</span></label>
-        <input type="text" id="f_supname" value="${esc(u.supName)}" oninput="state.user.supName=this.value"></div>
+        ${combo('supname', 'f_supname', u.supName, 'พิมพ์เพื่อค้นหาชื่อหัวหน้า...')}</div>
       <div class="field"><label>อีเมลหัวหน้างาน <span class="req">*</span></label>
-        <input type="email" id="f_supemail" value="${esc(u.supEmail)}" oninput="state.user.supEmail=this.value"></div>
+        ${combo('supemail', 'f_supemail', u.supEmail, 'boss@banpu.co.th')}</div>
     </div>
     <div class="field-row">
       <div class="field"><label>Cost Center</label>
