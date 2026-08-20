@@ -37,10 +37,71 @@
 
   var MANDATORY_APPROVAL_TOOLS = ['copilot_cowork', 'claude_cowork', 'claude_code'];
 
+  /**
+   * The Section 2.1 questions.
+   *
+   *  key      what gets stored in the Sheet's ConfidentialAnswers JSON. Treat as
+   *           permanent: renaming one makes old rows harder to compare.
+   *  label    Thai heading shown to the person filling in the form.
+   *  examples concrete instances, naming the actual systems Finance uses
+   *           (Coupa, Oracle R12, TM1, BPC) so nobody has to guess which
+   *           bucket their data falls in.
+   *
+   * Consolidated from an earlier 10-question list plus 3 proposed additions
+   * (13 in total) down to 7, by merging questions that were only distinguished
+   * by audience or by which team held the data -- neither of which changed the
+   * outcome. Nothing was dropped: every example from the long list appears
+   * under one of these seven.
+   */
   var CONFIDENTIAL_FIELDS = [
-    'Financial Data', 'Budget & Forecast', 'Vendor Pricing', 'Contracts', 'Employee Data',
-    'Customer Data', 'Executive Reports', 'Strategic Information', 'Internal Reports', 'Source Code'
+    {
+      key: 'Financial & Budget Data',
+      label: 'ข้อมูลการเงินและงบประมาณ',
+      examples: 'งบการเงิน, รายได้/กำไร-ขาดทุน, GL/Journal entries, ผังบัญชี · AP (invoice supplier, payment run), ' +
+                'AR (invoice ลูกค้า, aging report) · ทะเบียนทรัพย์สิน/ค่าเสื่อมราคา · ภาษี (ภ.พ.30, ภ.ง.ด.) · ' +
+                'เงินสด-ธนาคาร, เลขบัญชี, การโอนเงิน · งบประมาณและประมาณการยอดขาย/ต้นทุนล่วงหน้า ' +
+                '— Oracle R12 (GL/AP/AR/FA), Coupa (invoice, payment), TM1',
+    },
+    {
+      key: 'Contracts & Vendor Terms',
+      label: 'สัญญาและเงื่อนไขคู่ค้า',
+      examples: 'สัญญาจ้าง, สัญญาซื้อขาย, NDA, MOU · ราคาที่เจรจากับ supplier, quotation, เงื่อนไขการต่อรอง ' +
+                '— Coupa (sourcing, PR/PO)',
+    },
+    {
+      key: 'Personal Data (PDPA)',
+      label: 'ข้อมูลส่วนบุคคล (PDPA)',
+      examples: 'เงินเดือน, ข้อมูลส่วนตัวพนักงาน, ผลประเมินผลงาน · รายชื่อ/ข้อมูลติดต่อลูกค้า, ประวัติการซื้อ · ' +
+                'ชื่อและข้อมูลติดต่อผู้แทนฝั่ง supplier · ผลสำรวจที่ระบุตัวบุคคลได้',
+    },
+    {
+      key: 'Internal & Management Reports',
+      label: 'รายงานภายในและรายงานผู้บริหาร',
+      examples: 'รายงานประจำเดือน/ประจำไตรมาสที่ใช้ภายในทีม · รายงานเสนอผู้บริหารระดับสูง, board deck',
+    },
+    {
+      key: 'Strategic / Pre-disclosure (MNPI)',
+      label: 'ข้อมูลเชิงกลยุทธ์ / ยังไม่เปิดเผยต่อตลาด',
+      examples: 'แผนควบรวมกิจการ (M&A), แผนขยายธุรกิจ · ผลประกอบการก่อนประกาศต่อตลาดหลักทรัพย์ · ' +
+                'ธุรกรรมระหว่างบริษัทในเครือ, งบ consolidation กลุ่ม — BPC ' +
+                '⚠️ ข้อนี้มีประเด็นทางกฎหมายเรื่อง insider trading ไม่ใช่แค่นโยบายภายใน',
+    },
+    {
+      key: 'Audit & Internal Control',
+      label: 'ผลตรวจสอบและการควบคุมภายใน',
+      examples: 'ผลการตรวจสอบภายใน/ผู้สอบบัญชี · ประเด็นการควบคุมภายใน, ข้อสังเกตที่ยังไม่ปิด · เรื่องร้องเรียน',
+    },
+    {
+      key: 'System, Code & Credentials',
+      label: 'ระบบ โค้ด และข้อมูลเชื่อมต่อ',
+      examples: 'โค้ดโปรแกรม, ไฟล์ configuration ของระบบภายใน · ข้อมูล export ตรงจากฐานข้อมูล ' +
+                '(raw table, SQL extract) จาก Oracle R12 / TM1 / BPC · credential, รหัส, หรือ config ' +
+                'ที่ใช้เชื่อมต่อระบบ',
+    },
   ];
+
+  // Just the stored keys, for code that only needs the names.
+  var CONFIDENTIAL_KEYS = CONFIDENTIAL_FIELDS.map(function (f) { return f.key; });
 
   var ACTIVITIES = [
     { id: 'draft_email',        label: 'Draft Email',            level: 1, tool: 'copilot_chat' },
@@ -67,8 +128,17 @@
 
   function computeClassification(confidential) {
     confidential = confidential || {};
-    for (var i = 0; i < CONFIDENTIAL_FIELDS.length; i++) {
-      if (confidential[CONFIDENTIAL_FIELDS[i]] === 'yes') return 'confidential';
+    // ANY 'yes' means confidential -- deliberately not limited to the current
+    // question keys. A browser running a cached older version of the form sends
+    // the OLD question names; matching only today's names would classify those
+    // answers as non-confidential and hand the person a Claude tool for data
+    // they just told us was sensitive. That is the one mistake this function
+    // must never make, so it errs toward 'confidential' instead.
+    for (var k in confidential) {
+      if (Object.prototype.hasOwnProperty.call(confidential, k) &&
+          String(confidential[k]).toLowerCase() === 'yes') {
+        return 'confidential';
+      }
     }
     return 'non-confidential';
   }
@@ -134,6 +204,7 @@
     TOOLS: TOOLS,
     ACTIVITIES: ACTIVITIES,
     CONFIDENTIAL_FIELDS: CONFIDENTIAL_FIELDS,
+    CONFIDENTIAL_KEYS: CONFIDENTIAL_KEYS,
     MANDATORY_APPROVAL_TOOLS: MANDATORY_APPROVAL_TOOLS,
     activityById: activityById,
     computeClassification: computeClassification,

@@ -240,6 +240,14 @@ function renderStep1(){
 
 function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim()); }
 
+/* Section 2.1 answers are keyed by the question's stored key, but the radio
+   buttons address questions by index -- the keys contain spaces, '&' and
+   brackets, which would need escaping in an inline handler. */
+function setConf(i, val){
+  const f = CONFIDENTIAL_FIELDS[i];
+  if(f) state.confidential[f.key] = val;
+}
+
 function validateStep1(){
   const u = state.user;
   const missing = [];
@@ -257,11 +265,16 @@ function validateStep1(){
 
 /* ---- Step 2: Confidentiality ---- */
 function renderStep2(){
-  const rows = CONFIDENTIAL_FIELDS.map(f=>{
-    const val = state.confidential[f];
-    return `<tr><td class="qlabel">${f}</td><td><div class="yn">
-      <label><input type="radio" name="q_${f}" value="yes" ${val==='yes'?'checked':''} onchange="state.confidential['${f}']='yes'"> Yes</label>
-      <label><input type="radio" name="q_${f}" value="no" ${val==='no'?'checked':''} onchange="state.confidential['${f}']='no'"> No</label>
+  const rows = CONFIDENTIAL_FIELDS.map((f,i)=>{
+    const val = state.confidential[f.key];
+    const nm = 'q_' + i;   // index, not the key: keys contain spaces and brackets
+    return `<tr><td class="qlabel">
+        <div class="qname">${esc(f.label)}</div>
+        <div class="qex">${esc(f.examples)}</div>
+        <div class="qkey">${esc(f.key)}</div>
+      </td><td><div class="yn">
+      <label><input type="radio" name="${nm}" value="yes" ${val==='yes'?'checked':''} onchange="setConf(${i},'yes')"> Yes</label>
+      <label><input type="radio" name="${nm}" value="no" ${val==='no'?'checked':''} onchange="setConf(${i},'no')"> No</label>
     </div></td></tr>`;
   }).join('');
   return `
@@ -282,7 +295,13 @@ function renderStep2(){
   </div>`;
 }
 function validateStep2(){
-  if(!CONFIDENTIAL_FIELDS.every(f => state.confidential[f])){ document.getElementById('step2err').textContent = 'กรุณาตอบคำถามให้ครบทุกข้อ'; return; }
+  const unanswered = CONFIDENTIAL_FIELDS.filter(f => !state.confidential[f.key]);
+  if(unanswered.length){
+    document.getElementById('step2err').textContent =
+      'กรุณาตอบให้ครบทุกข้อ — ยังไม่ได้ตอบ: ' + unanswered.map(f=>f.label).join(', ');
+    return;
+  }
+  if(!state.publicOnly){ document.getElementById('step2err').textContent = 'กรุณาตอบข้อ Public Data Only'; return; }
   state.step = 3; renderRoot();
 }
 
