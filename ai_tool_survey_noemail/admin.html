@@ -3,8 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- This page is edited often and read by ~70 people who each keep a tab open.
+     A stale copy silently serves stale JavaScript, which looks like "the fix
+     didn't deploy" -- so correctness wins over the few KB caching would save. -->
+<meta http-equiv="Cache-Control" content="no-store">
 <title>Admin — AI Tool Requests</title>
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css" id="css">
 </head>
 <body>
 <div class="app wide">
@@ -17,9 +21,21 @@
   <footer class="disclaimer">รหัสผ่านถูกตรวจสอบที่ฝั่งเซิร์ฟเวอร์ (Google Apps Script) ไม่ได้เก็บไว้ในหน้าเว็บนี้</footer>
 </div>
 
-<script src="config.js?v=5"></script>
-<script src="recommendation.js?v=5"></script>
-<script src="api.js?v=5"></script>
-<script src="admin.js?v=5"></script>
+<script>
+/* Load the app's own scripts with a fresh stamp every time. GitHub Pages caches
+   JS for minutes at a time, which during active development means people keep
+   running yesterday's code and reporting bugs that are already fixed. Written
+   with document.write on purpose: it preserves execution order, which these
+   files depend on (config -> data -> engine -> api -> app). */
+(function () {
+  var t = Date.now();
+  var files = ['config.js', 'recommendation.js', 'api.js', 'admin.js'];
+  var css = document.getElementById('css');
+  if (css) css.href = 'style.css?t=' + t;
+  for (var i = 0; i < files.length; i++) {
+    document.write('<script src="' + files[i] + '?t=' + t + '"><\/script>');
+  }
+})();
+</script>
 </body>
 </html>
