@@ -271,7 +271,6 @@ function renderStep2(){
     return `<tr><td class="qlabel">
         <div class="qname">${esc(f.label)}</div>
         <div class="qex">${esc(f.examples)}</div>
-        <div class="qkey">${esc(f.key)}</div>
       </td><td><div class="yn">
       <label><input type="radio" name="${nm}" value="yes" ${val==='yes'?'checked':''} onchange="setConf(${i},'yes')"> Yes</label>
       <label><input type="radio" name="${nm}" value="no" ${val==='no'?'checked':''} onchange="setConf(${i},'no')"> No</label>
@@ -346,7 +345,7 @@ function renderStep4(){
   const isConf = classification==='confidential';
   const banner = `<div class="result-banner ${isConf?'conf':'nonconf'}"><div class="icon">${isConf?'🔒':'🌐'}</div>
     <div><strong>Data Classification: ${isConf?'Confidential':'Non-Confidential'}</strong><br>
-    <span style="font-size:12.5px">${isConf ? 'พบข้อมูลลับ → อนุญาตให้ใช้เฉพาะ Copilot Platform เท่านั้น' : 'ไม่มีข้อมูลลับ → สามารถใช้ Copilot หรือ Claude ได้'}</span></div></div>`;
+    <span style="font-size:12.5px">${isConf ? 'ข้อมูลของคุณจัดเป็น Confidential — อนุญาตให้ใช้เฉพาะ Copilot Platform เท่านั้น' : 'ข้อมูลของคุณจัดเป็น Non-Confidential — สามารถใช้ Copilot หรือ Claude ได้'}</span></div></div>`;
   const toolCards = tools.map(t=>{
     const reasons = state.activities.map(id=>RE.activityById(id))
       .filter(a => a.tool===t || (restricted && TOOLS[a.tool].platform==='claude' && t==='copilot_cowork'))

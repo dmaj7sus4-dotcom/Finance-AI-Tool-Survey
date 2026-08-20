@@ -42,7 +42,11 @@
    *
    *  key      what gets stored in the Sheet's ConfidentialAnswers JSON. Treat as
    *           permanent: renaming one makes old rows harder to compare.
-   *  label    Thai heading shown to the person filling in the form.
+   *  label    heading shown on the form. Kept in English at Samathi's request --
+   *           these are the terms the Finance team already uses in Coupa /
+   *           Oracle R12 / TM1 / BPC, and it keeps the form heading identical
+   *           to the key stored in the Sheet. The Thai detail lives in
+   *           `examples`.
    *  examples concrete instances, naming the actual systems Finance uses
    *           (Coupa, Oracle R12, TM1, BPC) so nobody has to guess which
    *           bucket their data falls in.
@@ -56,7 +60,7 @@
   var CONFIDENTIAL_FIELDS = [
     {
       key: 'Financial & Budget Data',
-      label: 'ข้อมูลการเงินและงบประมาณ',
+      label: 'Financial & Budget Data',
       examples: 'งบการเงิน, รายได้/กำไร-ขาดทุน, GL/Journal entries, ผังบัญชี · AP (invoice supplier, payment run), ' +
                 'AR (invoice ลูกค้า, aging report) · ทะเบียนทรัพย์สิน/ค่าเสื่อมราคา · ภาษี (ภ.พ.30, ภ.ง.ด.) · ' +
                 'เงินสด-ธนาคาร, เลขบัญชี, การโอนเงิน · งบประมาณและประมาณการยอดขาย/ต้นทุนล่วงหน้า ' +
@@ -64,36 +68,36 @@
     },
     {
       key: 'Contracts & Vendor Terms',
-      label: 'สัญญาและเงื่อนไขคู่ค้า',
+      label: 'Contracts & Vendor Terms',
       examples: 'สัญญาจ้าง, สัญญาซื้อขาย, NDA, MOU · ราคาที่เจรจากับ supplier, quotation, เงื่อนไขการต่อรอง ' +
                 '— Coupa (sourcing, PR/PO)',
     },
     {
       key: 'Personal Data (PDPA)',
-      label: 'ข้อมูลส่วนบุคคล (PDPA)',
+      label: 'Personal Data (PDPA)',
       examples: 'เงินเดือน, ข้อมูลส่วนตัวพนักงาน, ผลประเมินผลงาน · รายชื่อ/ข้อมูลติดต่อลูกค้า, ประวัติการซื้อ · ' +
                 'ชื่อและข้อมูลติดต่อผู้แทนฝั่ง supplier · ผลสำรวจที่ระบุตัวบุคคลได้',
     },
     {
       key: 'Internal & Management Reports',
-      label: 'รายงานภายในและรายงานผู้บริหาร',
+      label: 'Internal & Management Reports',
       examples: 'รายงานประจำเดือน/ประจำไตรมาสที่ใช้ภายในทีม · รายงานเสนอผู้บริหารระดับสูง, board deck',
     },
     {
       key: 'Strategic / Pre-disclosure (MNPI)',
-      label: 'ข้อมูลเชิงกลยุทธ์ / ยังไม่เปิดเผยต่อตลาด',
+      label: 'Strategic / Pre-disclosure (MNPI)',
       examples: 'แผนควบรวมกิจการ (M&A), แผนขยายธุรกิจ · ผลประกอบการก่อนประกาศต่อตลาดหลักทรัพย์ · ' +
                 'ธุรกรรมระหว่างบริษัทในเครือ, งบ consolidation กลุ่ม — BPC ' +
                 '⚠️ ข้อนี้มีประเด็นทางกฎหมายเรื่อง insider trading ไม่ใช่แค่นโยบายภายใน',
     },
     {
       key: 'Audit & Internal Control',
-      label: 'ผลตรวจสอบและการควบคุมภายใน',
+      label: 'Audit & Internal Control',
       examples: 'ผลการตรวจสอบภายใน/ผู้สอบบัญชี · ประเด็นการควบคุมภายใน, ข้อสังเกตที่ยังไม่ปิด · เรื่องร้องเรียน',
     },
     {
       key: 'System, Code & Credentials',
-      label: 'ระบบ โค้ด และข้อมูลเชื่อมต่อ',
+      label: 'System, Code & Credentials',
       examples: 'โค้ดโปรแกรม, ไฟล์ configuration ของระบบภายใน · ข้อมูล export ตรงจากฐานข้อมูล ' +
                 '(raw table, SQL extract) จาก Oracle R12 / TM1 / BPC · credential, รหัส, หรือ config ' +
                 'ที่ใช้เชื่อมต่อระบบ',

@@ -106,7 +106,6 @@ input[readonly]{background:#f2f5f8;color:var(--muted);}
 .qa-table td.qlabel{width:auto;}
 .qa-table .qname{font-weight:700;color:var(--navy);font-size:14px;}
 .qa-table .qex{font-weight:400;color:var(--muted);font-size:12.5px;line-height:1.5;margin-top:3px;}
-.qa-table .qkey{font-weight:400;color:#9aa8b6;font-size:11px;margin-top:3px;letter-spacing:.02em;}
 .qa-table .yn{white-space:nowrap;}
 .yn{display:flex;gap:14px;}
 .yn label{font-weight:500;color:var(--text);display:flex;align-items:center;gap:5px;font-size:13px;}
