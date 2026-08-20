@@ -90,6 +90,7 @@ async function copyText(text, what) {
 /** The message to send a supervisor, ready to paste into Outlook. */
 function composeEmail(r) {
   const finalTool = r.OverrideTool || r.RecommendedTools || '-';
+  const unit = [r.Department, r.BusinessUnit].filter(Boolean).join(' / ');
   return [
     'เรียน คุณ' + (r.SupervisorName || ''),
     '',
@@ -98,13 +99,17 @@ function composeEmail(r) {
     '',
     'Request ID        : ' + (r.RequestId || ''),
     'ผู้ขอ              : ' + (r.Name || '') + ' <' + (r.Email || '') + '>',
-    'หน่วยงาน           : ' + (r.Department || '') + ' / ' + (r.BusinessUnit || ''),
-    'ตำแหน่ง            : ' + (r.JobRole || ''),
+    // Department / BusinessUnit / JobRole are optional now (the form stopped
+    // asking for the last two). null means "drop this line entirely" -- an
+    // empty string would keep it as a deliberate blank spacer line, which is
+    // why the two are distinguished in the filter below.
+    unit ? 'หน่วยงาน           : ' + unit : null,
+    r.JobRole ? 'ตำแหน่ง            : ' + r.JobRole : null,
     'ความลับของข้อมูล   : ' + (r.Classification === 'confidential' ? 'Confidential' : 'Non-Confidential'),
     'AI Level           : Level ' + (r.AILevel || ''),
     'กิจกรรมที่ขอใช้     : ' + (r.Activities || ''),
     'เครื่องมือ          : ' + finalTool,
-    (r.OverrideTool ? 'ผู้ขอเลือกเอง      : ' + r.OverrideTool + ' — ' + (r.OverrideReason || 'ไม่ระบุเหตุผล') : ''),
+    r.OverrideTool ? 'ผู้ขอเลือกเอง      : ' + r.OverrideTool + ' — ' + (r.OverrideReason || 'ไม่ระบุเหตุผล') : null,
     'เหตุผลที่ต้องอนุมัติ : ' + (r.ApprovalReason || ''),
     '',
     'กดลิงก์นี้เพื่ออนุมัติหรือปฏิเสธ (ระบบจะบันทึกผลอัตโนมัติ):',
@@ -114,7 +119,7 @@ function composeEmail(r) {
     '',
     'ขอบคุณครับ/ค่ะ',
     'ทีมกำกับดูแลการใช้ AI — Finance',
-  ].filter(l => l !== '' || true).join('\n');
+  ].filter(l => l !== null).join('\n');   // '' is kept: those are blank spacer lines
 }
 
 function emailSubject(r) {
@@ -312,8 +317,9 @@ function renderTable(){
           <div><strong>อีเมล:</strong> ${esc(r.Email)}</div>
           <div><strong>หัวหน้างาน:</strong> ${esc(r.SupervisorName)} (${esc(r.SupervisorEmail)})</div>
           <div><strong>Country:</strong> ${esc(r.Country)}</div>
-          <div><strong>Job Role:</strong> ${esc(r.JobRole)}</div>
-          <div><strong>Cost Center:</strong> ${esc(r.CostCenter)||'-'}</div>
+          ${r.BusinessUnit ? `<div><strong>Business Unit:</strong> ${esc(r.BusinessUnit)}</div>` : ''}
+          ${r.JobRole ? `<div><strong>Job Role:</strong> ${esc(r.JobRole)}</div>` : ''}
+          ${r.CostCenter ? `<div><strong>Cost Center:</strong> ${esc(r.CostCenter)}</div>` : ''}
           <div><strong>Public Data Only:</strong> ${esc(r.PublicDataOnly)||'-'}</div>
         </div>
         ${r.Responsibilities ? `<div style="margin-top:8px"><strong>หน้าที่หลัก:</strong> ${esc(r.Responsibilities)}</div>` : ''}
@@ -361,7 +367,7 @@ function renderTable(){
     return `<tr class="${needsSending(r)?'is-pending':''}">
       <td><button class="link-btn" onclick="toggle('${esc(id)}')">${esc(id)}</button></td>
       <td>${fmtDate(r.SubmittedAt)}</td>
-      <td>${esc(r.Name)}<br><span class="hint">${esc(r.Department)} / ${esc(r.BusinessUnit)}</span></td>
+      <td>${esc(r.Name)}<br><span class="hint">${esc([r.Department, r.BusinessUnit].filter(Boolean).join(' / '))}</span></td>
       <td>${esc(r.SupervisorName)}<br><span class="hint">${esc(r.SupervisorEmail)}</span></td>
       <td><span class="lvl-pill lvl-${esc(r.AILevel)}">Level ${esc(r.AILevel)}</span></td>
       <td>${esc(finalTool)}</td>

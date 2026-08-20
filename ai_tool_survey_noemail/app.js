@@ -6,8 +6,11 @@ const CONFIDENTIAL_FIELDS = RE.CONFIDENTIAL_FIELDS;
 
 const state = {
   step: 0,
-  user: { name:'', email:'', dept:'', bu:'', country:'', role:'', resp:'',
-          supName:'', supEmail:'', cc:'' },
+  // Business Unit, Job Role and Cost Center were removed from the form at
+  // Samathi's request. The Sheet keeps their columns so older rows stay
+  // readable; new rows simply leave them blank.
+  user: { name:'', email:'', dept:'', country:'', resp:'',
+          supName:'', supEmail:'' },
   confidential: {},
   publicOnly: null,
   activities: [],
@@ -210,17 +213,11 @@ function renderStep1(){
     <div class="field-row">
       <div class="field"><label>Department</label>
         ${combo('dept', 'f_dept', u.dept, 'พิมพ์เพื่อค้นหาแผนก...')}</div>
-      <div class="field"><label>Business Unit <span class="req">*</span></label>
-        <input type="text" id="f_bu" value="${esc(u.bu)}" oninput="state.user.bu=this.value"></div>
-    </div>
-    <div class="field-row">
       <div class="field"><label>Country <span class="req">*</span></label>
         <select id="f_country" onchange="state.user.country=this.value">
           <option value="">-- เลือก --</option>
           ${['Thailand','Indonesia','Australia','China','Singapore','Other'].map(c=>`<option ${u.country===c?'selected':''}>${c}</option>`).join('')}
         </select></div>
-      <div class="field"><label>Job Role <span class="req">*</span></label>
-        <input type="text" id="f_role" value="${esc(u.role)}" oninput="state.user.role=this.value"></div>
     </div>
     <div class="field full"><label>Main Responsibilities</label>
       <textarea rows="2" oninput="state.user.resp=this.value">${esc(u.resp)}</textarea></div>
@@ -233,12 +230,6 @@ function renderStep1(){
       <div class="field"><label>อีเมลหัวหน้างาน <span class="req">*</span></label>
         ${combo('supemail', 'f_supemail', u.supEmail, 'boss@banpu.co.th')}</div>
     </div>
-    <div class="field-row">
-      <div class="field"><label>Cost Center</label>
-        <input type="text" id="f_cc" value="${esc(u.cc)}" oninput="state.user.cc=this.value"></div>
-      <div class="field"></div>
-    </div>
-
     <div id="step1err" class="err"></div>
     <div class="btn-row">
       <button class="btn secondary" onclick="state.step=0;renderRoot()">← กลับ</button>
@@ -254,9 +245,7 @@ function validateStep1(){
   const missing = [];
   if(!u.name) missing.push('ชื่อ-นามสกุล');
   if(!u.email) missing.push('อีเมล');
-  if(!u.bu) missing.push('Business Unit');
   if(!u.country) missing.push('Country');
-  if(!u.role) missing.push('Job Role');
   if(!u.supName) missing.push('ชื่อหัวหน้างาน');
   if(!u.supEmail) missing.push('อีเมลหัวหน้างาน');
   const err = document.getElementById('step1err');
@@ -427,7 +416,7 @@ function renderStep6(){
   const activityLabels = state.activities.map(id=>RE.activityById(id).label).join(', ');
   const approvalRequired = approval.required===true || (approval.required==='optional' && state.policyOverrideAck);
   const rows = [
-    ['ผู้ขอ', `${esc(state.user.name)} (${esc(state.user.email)}) — ${esc(state.user.dept)} / ${esc(state.user.bu)}`],
+    ['ผู้ขอ', `${esc(state.user.name)} (${esc(state.user.email)})${state.user.dept ? ' — ' + esc(state.user.dept) : ''}`],
     ['หัวหน้างาน', `${esc(state.user.supName)} (${esc(state.user.supEmail)})`],
     ['Data Classification', classification==='confidential'?'Confidential':'Non-Confidential'],
     ['Activities Selected', activityLabels],
