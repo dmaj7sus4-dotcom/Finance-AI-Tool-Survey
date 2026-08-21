@@ -248,3 +248,8 @@ header.top a{text-decoration:underline;}
   background:var(--navy);color:#fff;padding:11px 20px;border-radius:24px;font-size:13px;
   box-shadow:0 8px 24px rgba(15,41,66,.28);transition:opacity .18s,transform .18s;pointer-events:none;z-index:99;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* The "what happens next" line on the confirmation screen. Given a little more
+   presence than a plain note because it answers the question people actually
+   have at that moment: is anything expected of me now? */
+.note-box.next-step{border-left:4px solid var(--teal);background:#f2fbf8;font-size:13.5px;line-height:1.6;}

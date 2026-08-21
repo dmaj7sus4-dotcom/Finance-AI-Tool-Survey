@@ -417,11 +417,18 @@ function renderStep6(){
     const s = state.submitted;
     const statusLabel = s.status==='pending' ? 'PENDING (รออนุมัติ)' : 'AUTO-APPROVED';
     const statusClass = s.status==='pending' ? 'pill-pending' : 'pill-auto';
+    // What happens next differs by status, so say the right thing rather than
+    // one line that is wrong half the time: a pending request is waiting on a
+    // supervisor, an auto-approved one is not waiting on anybody.
+    const nextStep = s.status==='pending'
+      ? 'คำขออยู่ระหว่างการพิจารณาโดยหัวหน้างาน และเมื่อพิจารณาแล้ว จะดำเนินการส่งต่อให้ BANPU AI Team ในขั้นตอนถัดไป'
+      : 'คำขอนี้ไม่เข้าเงื่อนไขที่ต้องขออนุมัติ ระบบบันทึกไว้เรียบร้อยแล้ว และจะรวบรวมส่งต่อให้ BANPU AI Team ในขั้นตอนถัดไป';
     return `
     <div class="card">
       <h2 class="sec-title">ส่งคำขอสำเร็จ</h2>
       <div class="note-box">✅ บันทึกเรียบร้อยแล้ว — Request ID: <strong>${esc(s.id)}</strong><br>
         สถานะ: <span class="pill-status ${statusClass}">${statusLabel}</span></div>
+      <div class="note-box next-step">${nextStep}</div>
       <p class="hint">บันทึก Request ID นี้ไว้อ้างอิง — ใช้สอบถามสถานะกับทีมกำกับดูแลได้</p>
       <div class="btn-row"><div></div><button class="btn secondary" onclick="resetWizard()">+ สร้างคำขอใหม่</button></div>
     </div>`;
